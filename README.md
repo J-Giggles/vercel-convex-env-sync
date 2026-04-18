@@ -7,6 +7,22 @@ Small **Node.js** (ESM) helpers to **pull** and **push** environment variables b
 - **Requirements:** Node.js 18+, [`pnpm`](https://pnpm.io) (or adapt commands to `npm`/`yarn`), the [Convex CLI](https://docs.convex.dev/cli) (`convex` via your project), and the [Vercel CLI](https://vercel.com/docs/cli) (`vercel` on your `PATH`, or it will try `pnpm dlx vercel`).
 - **No extra npm dependencies** — uses only Node built-ins.
 
+**Publishing this folder to a public repo:** see **[SECURITY.md](./SECURITY.md)** (verify no `.env*` / `.env.sync.*` in commits; subtree push notes).
+
+---
+
+## Which hosted env each target uses
+
+| Target | Vercel (`vercel env pull`) | Convex (`convex env …`) |
+|--------|---------------------------|---------------------------|
+| `dev` | **development** | **Dev** deployment (no `--prod` on `env list` / `env set`) |
+| `preview` | **preview** | **Dev** deployment via CLI\* |
+| `prod` | **production** | **Production** (`--prod`) |
+
+\*Preview PR backends may also use Convex dashboard defaults; see [Convex preview deployments](https://docs.convex.dev/production/hosting/preview-deployments).
+
+Your **`.env.local`** should still point `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPLOYMENT` at the **dev** deployment for local coding; **`pull -- prod`** writes **`.env.production.local`** for prod-shaped local runs, not `.env.local`. If **`pull dev`** mirrors prod, check that **Vercel → Development** env vars are what you expect (they may be copies of Production).
+
 ---
 
 ## What gets synced
@@ -90,6 +106,14 @@ In the **root** `package.json` of your app:
 Usage:
 
 ```bash
+# Interactive: lists Vercel deployment targets from `vercel env list`, pulls each scope,
+# infers Convex dev vs prod from slugs; if every target shares the same Convex slug but your
+# local `convex env list` / `--prod` slugs differ (e.g. another project), defaults to Convex production.
+pnpm run env:sync:pull
+
+# Merged Convex + Vercel per target, example layout → `.env.sync.development`, `.env.sync.preview`, …
+pnpm run env:sync:pull -- --all
+
 pnpm run env:sync:pull -- dev
 pnpm run env:sync:pull -- preview
 pnpm run env:sync:pull -- prod
@@ -99,15 +123,34 @@ pnpm run env:sync:push -- preview
 pnpm run env:sync:push -- prod
 ```
 
+**Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) the same merge (minus ephemeral `VERCEL_OIDC_TOKEN`) → **working file** with optional **example layout**: if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). Internal **`vercel env pull`** cache: **`.env.sync.cache.vercel.<env>`**.
+
+| Target | Example template (first file that exists) |
+|--------|---------------------------------------------|
+| `dev` | `.env.development.example`, then `.env.example` |
+| `preview` | `.env.preview.example`, then `.env.example` |
+| `prod` | `.env.production.example`, then `.env.example` |
+
+**Working file paths:** **dev** → `.env.local` / `.env.development.local`; **preview** → `.env.preview` only; **prod** → `.env.production.local` only. Backups under **`.env/sync/pull-backups/`**. **`--snapshot-only`** skips working files. **`env:sync:push`** uses **What gets synced** paths.
+
+### Troubleshooting
+
+| Symptom | What to do |
+|--------|------------|
+| `vercel env pull` / `not_linked` | From the **app repo root**, run **`vercel link`** once (or `vercel link --yes --scope <team> --project <name>` for non-interactive). Pull/push need a linked Vercel project. |
+| `No CONVEX_DEPLOYMENT set` | Run **`pnpm exec convex dev`** once, or ensure Convex is configured for this directory (`CONVEX_DEPLOYMENT` / `CONVEX_URL` in `.env.local`). |
+| `InvalidDeploymentName` / long instance name | `CONVEX_DEPLOYMENT` is sometimes `deploymentSlug` + `|` + token (too long for the API). The tool passes only the **slug** to the Convex CLI and normalizes pulls into `.env.local` / `.env.production.local`. |
+
 ---
 
 ## `.gitignore`
 
-Ignore the sync cache (contains merged env and metadata):
+Ignore the sync cache (metadata, pull backups) and root sync artifacts (secrets):
 
 ```gitignore
 # vercel-convex-env-sync
 .env/sync/
+.env.sync.*
 ```
 
 If you already ignore `.env*`, the `.env/sync/` directory is usually already ignored; the line above documents intent.
@@ -154,7 +197,7 @@ pnpm exec convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'pnp
 2. Link Vercel: `vercel link` from the app root.
 3. Add **`CONVEX_DEPLOY_KEY`** per Vercel environment (table above).
 4. Add other secrets (WorkOS, Stripe, etc.) in **Vercel** and **Convex** as your app requires.
-5. Run **`pnpm run env:sync:pull -- <target>`** once to populate `.env/sync/merged.<target>.env` and metadata (optional but recommended before first push).
+5. Run **`pnpm run env:sync:pull -- <target>`** once to populate `.env.sync.merge.<target>` and metadata (optional but recommended before first push).
 6. Deploy.
 
 ---

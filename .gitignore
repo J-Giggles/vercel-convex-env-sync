@@ -1,0 +1,6 @@
+# Standalone clone / subtree: never commit env material or host artifacts
+.env
+.env.*
+!.env.example
+.env.sync.*
+node_modules/

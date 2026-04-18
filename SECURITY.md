@@ -19,6 +19,20 @@ This directory contains **only source** (Node ESM). It does **not** embed API ke
    Expect **no** matches in tracked source (README may mention words like “token” in prose only).
 4. **Subtree push** (from app repo root) — pushes **only** this folder’s tree to the standalone remote; still verify step 1–2 after `git add`.
 
+### Upstream repo diverged (push rejected)
+
+If `git subtree push --prefix=scripts/vercel-convex-env-sync <remote> master` fails with **fetch first** / non–fast-forward, merge the public repo into this prefix, then push again (working tree must be clean):
+
+```bash
+git stash -u   # if needed
+git subtree pull --prefix=scripts/vercel-convex-env-sync <remote> master -m "chore: merge upstream vercel-convex-env-sync"
+# resolve any conflicts under scripts/vercel-convex-env-sync/
+git subtree push --prefix=scripts/vercel-convex-env-sync <remote> master
+git stash pop  # if you stashed
+```
+
+Replace `<remote>` with your remote name (e.g. `vercel-convex-env-sync`). Use **`main`** instead of **`master`** if the upstream default branch is `main`.
+
 ## What the tool writes locally (never commit)
 
 | Output | Typical location (app repo) |

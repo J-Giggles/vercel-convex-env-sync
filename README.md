@@ -121,9 +121,15 @@ pnpm run env:sync:pull -- prod
 pnpm run env:sync:push -- dev
 pnpm run env:sync:push -- preview
 pnpm run env:sync:push -- prod
+
+# Push all three Vercel scopes + Convex using the merged snapshot files (recommended after pull --all):
+pnpm run env:sync:push -- --all --yes
+
+# Same as older behavior: push --all from working .env*.local / .env.preview files instead of .env.sync.*:
+pnpm run env:sync:push -- --all --from-working --yes
 ```
 
-**Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) the same merge (minus ephemeral `VERCEL_OIDC_TOKEN`) → **working file** with optional **example layout**: if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). Internal **`vercel env pull`** cache: **`.env.sync.cache.vercel.<env>`**.
+**Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) the same merge (minus ephemeral `VERCEL_OIDC_TOKEN`) → **working file** with optional **example layout**: if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). **Ephemeral** (not for editing): **`vercel env pull`** writes **`.env/sync/cache.vercel.<env>.env`** and deletes it after parsing; **`env:sync:push`** writes **`.env/sync/push.convex.<target>.env`** for `convex env set --from-file` and removes it after the command. Older tool versions left **`.env.sync.cache.*`** / **`.env.sync.push.*`** at the repo root — safe to delete those files.
 
 | Target | Example template (first file that exists) |
 |--------|---------------------------------------------|

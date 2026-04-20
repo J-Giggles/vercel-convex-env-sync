@@ -122,6 +122,8 @@ pnpm run env:sync:push -- dev
 pnpm run env:sync:push -- preview
 pnpm run env:sync:push -- prod
 
+Preview scoped vars use Vercel’s **git branch** argument; default is **`staging`** (override: **`ENV_SYNC_VERCEL_PREVIEW_BRANCH`**).
+
 # Push all three Vercel scopes + Convex using the merged snapshot files (recommended after pull --all):
 pnpm run env:sync:push -- --all --yes
 

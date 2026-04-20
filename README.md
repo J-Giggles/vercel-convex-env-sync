@@ -21,7 +21,7 @@ Small **Node.js** (ESM) helpers to **pull** and **push** environment variables b
 
 \*Preview PR backends may also use Convex dashboard defaults; see [Convex preview deployments](https://docs.convex.dev/production/hosting/preview-deployments).
 
-Your **`.env.local`** should still point `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPLOYMENT` at the **dev** deployment for local coding; **`pull -- prod`** writes **`.env.production.local`** for prod-shaped local runs, not `.env.local`. If **`pull dev`** mirrors prod, check that **Vercel → Development** env vars are what you expect (they may be copies of Production).
+Your **`.env.local`** should still point **`NEXT_PUBLIC_CONVEX_URL`** (and optionally **`CONVEX_DEPLOY_KEY`**) at the **dev** deployment for local coding; **`pull -- prod`** writes **`.env.production.local`** for prod-shaped local runs, not `.env.local`. If **`pull dev`** mirrors prod, check that **Vercel → Development** env vars are what you expect (they may be copies of Production).
 
 ---
 
@@ -35,7 +35,7 @@ Your **`.env.local`** should still point `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPL
 
 \*The Convex CLI only targets **dev** or **prod** deployments. The `preview` target still updates the **dev** deployment’s env via the CLI; [preview deployments](https://docs.convex.dev/production/hosting/preview-deployments) may also use [project env defaults](https://docs.convex.dev/production/environment-variables#project-environment-variable-defaults) in the Convex dashboard.
 
-**Key routing** (edit `lib/split.mjs` in your copy if needed): Convex does not receive `NEXT_PUBLIC_*` / `VERCEL_*` / certain CI keys; `CONVEX_DEPLOYMENT` is omitted from the Vercel push.
+**Key routing** (edit `lib/split.mjs` in your copy if needed): Convex does not receive `NEXT_PUBLIC_*` / `VERCEL_*` / certain CI keys (`CONVEX_DEPLOY_KEY`, legacy `CONVEX_DEPLOYMENT`, …).
 
 ---
 
@@ -98,7 +98,9 @@ In the **root** `package.json` of your app:
 {
   "scripts": {
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
-    "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push"
+    "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
+    "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
+    "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear"
   }
 }
 ```
@@ -110,6 +112,7 @@ Usage:
 # infers Convex dev vs prod from slugs; if every target shares the same Convex slug but your
 # local `convex env list` / `--prod` slugs differ (e.g. another project), defaults to Convex production.
 pnpm run env:sync:pull
+# Interactive menu: **0** = same as `pull -- --all` (writes `.env.sync.*`); **1–3** = one Vercel scope.
 
 # Merged Convex + Vercel per target, example layout → `.env.sync.development`, `.env.sync.preview`, …
 pnpm run env:sync:pull -- --all
@@ -122,14 +125,26 @@ pnpm run env:sync:push -- dev
 pnpm run env:sync:push -- preview
 pnpm run env:sync:push -- prod
 
-Preview scoped vars use Vercel’s **git branch** argument; default is **`staging`** (override: **`ENV_SYNC_VERCEL_PREVIEW_BRANCH`**).
+# Guided interactive push (targets, snapshot vs working files, --yes, Vercel sensitive on/off):
+pnpm run env:sync:push:cli
+# Same as: pnpm run env:sync:push -- --interactive
+
+Preview **defaults to git branch `staging`** (`lib/env-sync-defaults.mjs`: **`VERCEL_SYNC_PREVIEW_DEFAULT_BRANCH`**, **`VERCEL_SYNC_PREVIEW_UNSCOPED=false`**). Set **`ENV_SYNC_VERCEL_PREVIEW_BRANCH=<name>`** to use another branch (e.g. `armands-staging`). Set **`ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH=1`** for unscoped Preview (all preview deployments; no `--git-branch` on pull). If unscoped Preview push hits **`git_branch_required`**, the tool uses the **REST API** fallback (see Troubleshooting).
 
 # Push all three Vercel scopes + Convex using the merged snapshot files (recommended after pull --all):
 pnpm run env:sync:push -- --all --yes
 
 # Same as older behavior: push --all from working .env*.local / .env.preview files instead of .env.sync.*:
 pnpm run env:sync:push -- --all --from-working --yes
+
+# Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
+pnpm run env:sync:clear
+pnpm run env:sync:clear -- --dry-run
 ```
+
+**Defaults:** `lib/env-sync-defaults.mjs` sets **`VERCEL_SYNC_USE_SENSITIVE = false`** so `vercel env add` does not receive `--sensitive` unless you set **`ENV_SYNC_VERCEL_USE_SENSITIVE=1`** or use **`env:sync:push:cli`** to force ON; **Preview** defaults to branch **`VERCEL_SYNC_PREVIEW_DEFAULT_BRANCH`** (`staging`) with **`VERCEL_SYNC_PREVIEW_UNSCOPED = false`** (override in that file or with env vars — see Preview paragraph above). Vercel [Sensitive](https://vercel.com/docs/environment-variables/sensitive-environment-variables) variables cannot be read back on `vercel env pull`.
+
+CLI output uses ANSI colors for the `[env:sync]` prefix (no extra npm dependencies).
 
 **Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) the same merge (minus ephemeral `VERCEL_OIDC_TOKEN`) → **working file** with optional **example layout**: if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). **Ephemeral** (not for editing): **`vercel env pull`** writes **`.env/sync/cache.vercel.<env>.env`** and deletes it after parsing; **`env:sync:push`** writes **`.env/sync/push.convex.<target>.env`** for `convex env set --from-file` and removes it after the command. Older tool versions left **`.env.sync.cache.*`** / **`.env.sync.push.*`** at the repo root — safe to delete those files.
 
@@ -145,9 +160,10 @@ pnpm run env:sync:push -- --all --from-working --yes
 
 | Symptom | What to do |
 |--------|------------|
+| `git_branch_required` / `action_required` on **Preview** push (`NEXT_PUBLIC_*`, `NODE_ENV`, etc.) | Most common when Preview is **unscoped** (`ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH=1`). Default repo config uses branch **`staging`**, which usually avoids this. If you still see it, the tool retries via **REST API** ( **`VERCEL_TOKEN`** or **`vercel login`** token file). Or set **`ENV_SYNC_VERCEL_PREVIEW_BRANCH`**. Optional: **`ENV_SYNC_VERCEL_TEAM_ID`**. |
 | `vercel env pull` / `not_linked` | From the **app repo root**, run **`vercel link`** once (or `vercel link --yes --scope <team> --project <name>` for non-interactive). Pull/push need a linked Vercel project. |
-| `No CONVEX_DEPLOYMENT set` | Run **`pnpm exec convex dev`** once, or ensure Convex is configured for this directory (`CONVEX_DEPLOYMENT` / `CONVEX_URL` in `.env.local`). |
-| `InvalidDeploymentName` / long instance name | `CONVEX_DEPLOYMENT` is sometimes `deploymentSlug` + `|` + token (too long for the API). The tool passes only the **slug** to the Convex CLI and normalizes pulls into `.env.local` / `.env.production.local`. |
+| Convex CLI cannot target a deployment | Ensure **`.env.local`** has **`NEXT_PUBLIC_CONVEX_URL`** and/or **`CONVEX_DEPLOY_KEY`** (or run **`pnpm exec convex dev`** once). |
+| `InvalidDeploymentName` / long instance name | **`CONVEX_DEPLOY_KEY`** / legacy vars are sometimes `deploymentSlug|opaqueToken` (too long for the API). The tool passes only the **prefix before `|`** to the Convex CLI and normalizes pulls into `.env.local` / `.env.production.local`. |
 
 ---
 

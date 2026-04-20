@@ -205,13 +205,13 @@ vercel env add CONVEX_DEPLOY_KEY preview
 vercel env add CONVEX_DEPLOY_KEY development
 ```
 
-Your **build command** should match Convex’s recommended pattern, e.g.:
+Your **build command** should match Convex’s recommended pattern (this repo’s `vercel.json` uses this verbatim):
 
 ```bash
-pnpm exec convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'pnpm run build'
+npx convex deploy --cmd 'npm run build'
 ```
 
-(Adjust package manager and app build script names.)
+Add `--cmd-url-env-var-name …` only if the CLI cannot infer your framework’s public Convex URL (see [Convex + Vercel](https://docs.convex.dev/production/hosting/vercel)).
 
 ---
 

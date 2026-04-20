@@ -205,13 +205,13 @@ vercel env add CONVEX_DEPLOY_KEY preview
 vercel env add CONVEX_DEPLOY_KEY development
 ```
 
-Your **build command** should match Convex’s recommended pattern (this repo’s `vercel.json` uses this verbatim):
+This repo’s **`vercel.json`** build command adds `--check-build-environment disable` so **Preview** Vercel builds can run `convex deploy` with a **production** deploy key (e.g. `staging` branch). If you use **Preview** Convex deploy keys for PR previews, you can omit that flag. Base pattern from [Convex + Vercel](https://docs.convex.dev/production/hosting/vercel):
 
 ```bash
 npx convex deploy --cmd 'npm run build'
 ```
 
-Add `--cmd-url-env-var-name …` only if the CLI cannot infer your framework’s public Convex URL (see [Convex + Vercel](https://docs.convex.dev/production/hosting/vercel)).
+Add `--cmd-url-env-var-name …` only if the CLI cannot infer your framework’s public Convex URL.
 
 ---
 

@@ -6,10 +6,12 @@
  *   pnpm run env:sync:pull
  *   pnpm run env:sync:pull -- --all
  *   pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only]
- *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync]
- *   pnpm run env:sync:push -- --all [--yes] [--from-working]
+ *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync] [convex]
+ *   pnpm run env:sync:push -- --all [--yes] [--from-working] [convex]
+ *   pnpm run env:sync:push -- … [--convex-only]   (same as trailing `convex`)
  *   pnpm run env:sync:push:cli
  *   pnpm run env:sync:clear [-- --dry-run]
+ *   pnpm run deploy -- <staging|production> [--git-push] [--yes]
  */
 import { interactivePull } from "./lib/interactive-pull.mjs";
 import { pullAllVercelDeployments } from "./lib/pull-all.mjs";
@@ -17,6 +19,7 @@ import { pullTarget } from "./lib/pull.mjs";
 import { pushTarget } from "./lib/push.mjs";
 import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
+import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -36,10 +39,14 @@ Usage:
                         Non-interactive preset (same pairing as before).
 
   pnpm run env:sync:push -- <dev|preview|prod>
+  pnpm run env:sync:push -- <dev|preview|prod> convex
   pnpm run env:sync:push -- --all
+  pnpm run env:sync:push -- --all convex
                         Push dev, then preview, then prod. Default: each reads its .env.sync.* snapshot
                         (same files as env:sync:pull -- --all). Each snapshot needs Convex routing
                         (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL).
+
+  Trailing \`convex\` or flag \`--convex-only\`: run \`convex env set\` only — no Vercel CLI (faster).
 
   pnpm run env:sync:push:cli
                         Interactive push: choose targets, from-sync vs working, Vercel sensitive, --yes.
@@ -47,6 +54,15 @@ Usage:
   pnpm run env:sync:clear [-- --dry-run]
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
                         hosted variables. --dry-run lists removals only.
+
+  pnpm run deploy -- <staging|production>
+                        Run gates, sync env, deploy Convex, then deploy Vercel directly.
+                        Staging maps to Vercel Preview + branch staging; production maps to
+                        Vercel Production + branch production.
+
+  pnpm run deploy -- <staging|production> --git-push
+                        Run the same gates/env/Convex deploy, then push the mapped branch instead
+                        of calling Vercel CLI directly.
 
   --from-sync       (push only, single target) Read the matching .env.sync.* instead of working files.
 
@@ -56,6 +72,20 @@ Usage:
   --interactive     (push only) Same as env:sync:push:cli — guided push.
 
   --yes, -y         (push only) Skip drift / local-change confirmations.
+
+  --convex-only     (push only) Same as trailing \`convex\`: Convex only, skip Vercel.
+
+  --force           (push only) Disable per-key diff; push every key even if the remote value matches.
+                        Default behavior fetches remote Convex + Vercel maps and only pushes keys whose
+                        value differs or that are new.
+
+  Deploy flags:
+  --git-push        Push staging/production branch for Vercel Git integration instead of \`vercel deploy\`.
+  --from-working    Read working .env files instead of .env.sync.* snapshots for deploy env sync.
+  --skip-gates      Skip lint, typecheck, and build.
+  --skip-env-sync   Skip hosted env push.
+  --skip-convex-deploy
+  --skip-vercel-deploy
 
   --snapshot-only   (pull only) Write .env.sync.merge.<target> only; do not update .env.local / .env.production.local.
 
@@ -68,13 +98,17 @@ Snapshots: .env/sync/metadata.json (gitignored)
 const raw = process.argv.slice(2).filter((a) => a !== "--");
 const flags = new Set(raw.filter((a) => a.startsWith("-")));
 const positional = raw.filter((a) => !a.startsWith("-"));
-const [cmd, target] = positional;
+const convexOnly =
+  flags.has("--convex-only") || positional.includes("convex");
+const positionalNoConvex = positional.filter((a) => a !== "convex");
+const [cmd, target] = positionalNoConvex;
 const snapshotOnly = flags.has("--snapshot-only");
 const pullAll = flags.has("--all");
 const pushAll = cmd === "push" && flags.has("--all");
 const pushYes = cmd === "push" && (flags.has("--yes") || flags.has("-y"));
 const pushFromSync = cmd === "push" && flags.has("--from-sync");
 const pushFromWorking = cmd === "push" && flags.has("--from-working");
+const pushForce = cmd === "push" && flags.has("--force");
 const pushInteractive =
   cmd === "push" && (flags.has("--interactive") || flags.has("-i"));
 
@@ -122,7 +156,12 @@ try {
           "Ignoring --from-working without --all (single-target push already uses working files unless you pass --from-sync)."
         );
       }
-      const pushOpts = { yes: pushYes, fromSync: fromSyncForPush };
+      const pushOpts = {
+        yes: pushYes,
+        fromSync: fromSyncForPush,
+        convexOnly,
+        force: pushForce,
+      };
       if (pushAll) {
         for (const t of /** @type {const} */ (["dev", "preview", "prod"])) {
           console.log("");
@@ -137,6 +176,8 @@ try {
         );
       }
     }
+  } else if (cmd === "deploy") {
+    await deployTarget(parseDeployArgs(raw.slice(1)));
   } else {
     usage();
     process.exit(1);

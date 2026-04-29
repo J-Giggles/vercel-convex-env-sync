@@ -100,7 +100,12 @@ In the **root** `package.json` of your app:
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
-    "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear"
+    "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear",
+    "deploy": "node scripts/vercel-convex-env-sync/run.mjs deploy",
+    "deploy:staging": "pnpm deploy -- staging",
+    "deploy:production": "pnpm deploy -- production",
+    "deploy:staging:git": "pnpm deploy -- staging --git-push",
+    "deploy:production:git": "pnpm deploy -- production --git-push"
   }
 }
 ```
@@ -141,6 +146,26 @@ pnpm run env:sync:push -- --all --from-working --yes
 pnpm run env:sync:clear
 pnpm run env:sync:clear -- --dry-run
 ```
+
+### Deploy command
+
+This repo also exposes a deploy orchestrator through the same entrypoint:
+
+```bash
+pnpm deploy:staging
+pnpm deploy:production
+pnpm deploy:staging:git
+pnpm deploy:production:git
+```
+
+The direct commands run gates (`lint`, `typecheck`, `build`), push the matching `.env.sync.*` snapshot to Convex and Vercel, run `convex deploy`, then call Vercel CLI directly. The `:git` commands use the same gates/env/Convex deploy, then push the mapped branch so Vercel Git integration performs the frontend deploy:
+
+| Deploy target | Env sync target | Vercel environment | Branch |
+|---------------|-----------------|--------------------|--------|
+| `staging` | `preview` | Preview | `staging` |
+| `production` | `prod` | Production | `production` |
+
+By default deploy reads `.env.sync.preview` / `.env.sync.production`; run `pnpm env:sync:pull -- --all` before first use or after hosted env changes. Pass `--from-working` only when you intentionally want to deploy from working `.env*` files.
 
 **Defaults:** `lib/env-sync-defaults.mjs` sets **`VERCEL_SYNC_USE_SENSITIVE = false`** so `vercel env add` does not receive `--sensitive` unless you set **`ENV_SYNC_VERCEL_USE_SENSITIVE=1`** or use **`env:sync:push:cli`** to force ON; **Preview** defaults to branch **`VERCEL_SYNC_PREVIEW_DEFAULT_BRANCH`** (`staging`) with **`VERCEL_SYNC_PREVIEW_UNSCOPED = false`** (override in that file or with env vars — see Preview paragraph above). Vercel [Sensitive](https://vercel.com/docs/environment-variables/sensitive-environment-variables) variables cannot be read back on `vercel env pull`.
 

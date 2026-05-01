@@ -13,6 +13,7 @@
  *   pnpm run env:sync:clear [-- --dry-run]
  *   pnpm run deploy -- <staging|production> [--git-push] [--yes]
  */
+import { checkTarget } from "./lib/check.mjs";
 import { interactivePull } from "./lib/interactive-pull.mjs";
 import { pullAllVercelDeployments } from "./lib/pull-all.mjs";
 import { pullTarget } from "./lib/pull.mjs";
@@ -51,6 +52,12 @@ Usage:
 
   pnpm run env:sync:push:cli
                         Interactive push: choose targets, from-sync vs working, Vercel sensitive, --yes.
+
+  pnpm run env:sync:check -- <dev|preview|prod> [--from-working] [--convex-only|--vercel-only] [-q]
+                        Read-only diff: compare local file vs hosted Convex + Vercel for the target.
+                        Exits 0 if in sync, 1 otherwise. Default source is .env.sync.<env>; pass
+                        --from-working for working .env files. Use -q / --quiet to print only
+                        \`true\` / \`false\`.
 
   pnpm run env:sync:clear [-- --dry-run]
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
@@ -129,6 +136,12 @@ if (cmd === "pull" && target && !VALID.has(target)) {
   process.exit();
 }
 
+if (cmd === "check" && (!target || !VALID.has(target))) {
+  usage();
+  process.exitCode = 1;
+  process.exit();
+}
+
 try {
   if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
@@ -178,6 +191,13 @@ try {
         );
       }
     }
+  } else if (cmd === "check") {
+    await checkTarget(/** @type {"dev" | "preview" | "prod"} */ (target), {
+      fromSync: !flags.has("--from-working"),
+      quiet: flags.has("--quiet") || flags.has("-q"),
+      convexOnly: flags.has("--convex-only") || positional.includes("convex"),
+      vercelOnly: flags.has("--vercel-only"),
+    });
   } else if (cmd === "deploy") {
     await deployTarget(parseDeployArgs(raw.slice(1)));
   } else {

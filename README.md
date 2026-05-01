@@ -100,6 +100,7 @@ In the **root** `package.json` of your app:
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
+    "env:sync:check": "node scripts/vercel-convex-env-sync/run.mjs check",
     "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear",
     "deploy": "node scripts/vercel-convex-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
@@ -142,6 +143,13 @@ pnpm run env:sync:push -- --all --yes
 # Read working .env*.local / .env.preview files instead of .env.sync.* (legacy behavior):
 pnpm run env:sync:push -- preview --from-working
 pnpm run env:sync:push -- --all --from-working --yes
+
+# Read-only diff: compare local file vs hosted Convex + Vercel for one target.
+# Exits 0 when both platforms match, 1 otherwise.
+pnpm run env:sync:check -- preview
+pnpm run env:sync:check -- prod --convex-only
+pnpm run env:sync:check -- preview --vercel-only
+pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
 
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear

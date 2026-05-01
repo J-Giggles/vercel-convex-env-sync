@@ -4,7 +4,14 @@
 
 Small **Node.js** (ESM) helpers to **pull** and **push** environment variables between your machine, [**Convex**](https://convex.dev) (`convex env`), and [**Vercel**](https://vercel.com) (`vercel env`). Includes **drift warnings** before overwriting hosted env.
 
-- **Requirements:** Node.js 18+, [`pnpm`](https://pnpm.io) (or adapt commands to `npm`/`yarn`), the [Convex CLI](https://docs.convex.dev/cli) (`convex` via your project), and the [Vercel CLI](https://vercel.com/docs/cli) (`vercel` on your `PATH`, or it will try `pnpm dlx vercel`).
+Supports both:
+
+- **Single-repo mode** (default) — one Vercel-linked project at the repo root.
+- **Monorepo mode** — multiple Vercel-linked projects (e.g. `apps/admin`, `apps/website`) sharing the same `.env.sync.*` snapshot files.
+
+Convex is **optional**: stacks without Convex (e.g. Postgres / Drizzle / Neon) can disable Convex entirely and use this tool as a Vercel-only env sync.
+
+- **Requirements:** Node.js 18+, [`pnpm`](https://pnpm.io) (or adapt commands to `npm`/`yarn`), the [Vercel CLI](https://vercel.com/docs/cli) (`vercel` on your `PATH`, or it will try `pnpm dlx vercel`). The [Convex CLI](https://docs.convex.dev/cli) is required only when Convex is enabled (the default).
 - **No extra npm dependencies** — uses only Node built-ins.
 
 **Publishing this folder to a public repo:** see **[SECURITY.md](./SECURITY.md)** (verify no `.env*` / `.env.sync.*` in commits; subtree push notes).
@@ -87,6 +94,63 @@ The repository root is `run.mjs` + `lib/` — add it as **`scripts/vercel-convex
 ```bash
 git submodule add https://github.com/J-Giggles/vercel-convex-env-sync.git scripts/vercel-convex-env-sync
 ```
+
+---
+
+## Configuration (env vars)
+
+All configuration is read from environment variables. Set them in `package.json` scripts so every invocation gets the same values.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `ENV_SYNC_DISABLE_CONVEX` | unset | When `1` / `true` / `yes`: skip every Convex CLI call. `pull` / `push` / `check` / `clear` / `deploy` operate on Vercel only. Required for projects without a Convex backend. |
+| `ENV_SYNC_VERCEL_PROJECT_CWD` | `""` (REPO_ROOT) | Relative path (from repo root) to the directory that owns `.vercel/project.json`. Use this when the Vercel-linked project lives in a subdirectory (e.g. `apps/admin`). |
+| `ENV_SYNC_VERCEL_PROJECTS` | unset | Comma-separated list of relative paths. When ≥ 2 entries, `push` / `check` / `deploy` loop the operation across every project, sharing the same `.env.sync.*` snapshot. Each iteration sets `ENV_SYNC_VERCEL_PROJECT_CWD` internally. `pull` and `clear` stay single-project (use `--project=<rel>` to pick one). |
+| `ENV_SYNC_VERCEL_PREVIEW_BRANCH` | `staging` | Git branch used to scope Vercel Preview env vars. |
+| `ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH` | unset | When `1`: Preview env vars are unscoped (apply to all preview deployments). |
+| `ENV_SYNC_VERCEL_CONCURRENCY` | `8` | Vercel REST API concurrency for env upserts. |
+
+### Per-invocation flags
+
+| Flag | Effect |
+|------|--------|
+| `--project=<rel>` | Pin a single invocation to one Vercel project; overrides `ENV_SYNC_VERCEL_PROJECT_CWD` and any monorepo loop. |
+| `--all-projects` | Force the monorepo loop on `push` / `check` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
+
+### Single-repo example (Convex + Vercel — original behavior)
+
+```json
+{
+  "scripts": {
+    "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
+    "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push"
+  }
+}
+```
+
+### Vercel-only example (no Convex)
+
+```json
+{
+  "scripts": {
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/vercel-convex-env-sync/run.mjs pull",
+    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/vercel-convex-env-sync/run.mjs push"
+  }
+}
+```
+
+### Monorepo example (multiple Vercel apps, no Convex)
+
+```json
+{
+  "scripts": {
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin node scripts/vercel-convex-env-sync/run.mjs pull",
+    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/vercel-convex-env-sync/run.mjs push"
+  }
+}
+```
+
+`pull` reads from one project (the snapshot is shared); `push` loops both.
 
 ---
 

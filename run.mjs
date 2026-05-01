@@ -21,6 +21,7 @@ import { pushTarget } from "./lib/push.mjs";
 import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
+import { syncMergeTarget } from "./lib/sync-merge.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -57,7 +58,15 @@ Usage:
                         Read-only diff: compare local file vs hosted Convex + Vercel for the target.
                         Exits 0 if in sync, 1 otherwise. Default source is .env.sync.<env>; pass
                         --from-working for working .env files. Use -q / --quiet to print only
-                        \`true\` / \`false\`.
+                        \`true\` / \`false\`. Also flags keys present locally/remotely but not
+                        validated by env.ts (deprecated / unmanaged).
+
+  pnpm run env:sync -- <dev|preview|prod> [--yes] [--skip-push]
+                        Three-way merge .env.sync.<env> ↔ Convex ↔ Vercel: any key that's empty
+                        or missing on one side and filled on another is propagated everywhere.
+                        Distinct non-empty values are flagged as conflicts and skipped.
+                        Writes the merged map back to .env.sync.<env>, then pushes to both
+                        remotes (skip with --skip-push).
 
   pnpm run env:sync:clear [-- --dry-run]
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
@@ -142,6 +151,12 @@ if (cmd === "check" && (!target || !VALID.has(target))) {
   process.exit();
 }
 
+if (cmd === "sync" && (!target || !VALID.has(target))) {
+  usage();
+  process.exitCode = 1;
+  process.exit();
+}
+
 try {
   if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
@@ -197,6 +212,11 @@ try {
       quiet: flags.has("--quiet") || flags.has("-q"),
       convexOnly: flags.has("--convex-only") || positional.includes("convex"),
       vercelOnly: flags.has("--vercel-only"),
+    });
+  } else if (cmd === "sync") {
+    await syncMergeTarget(/** @type {"dev" | "preview" | "prod"} */ (target), {
+      yes: flags.has("--yes") || flags.has("-y"),
+      skipPush: flags.has("--skip-push"),
     });
   } else if (cmd === "deploy") {
     await deployTarget(parseDeployArgs(raw.slice(1)));

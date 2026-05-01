@@ -6,13 +6,14 @@
  *   pnpm run env:sync:pull
  *   pnpm run env:sync:pull -- --all
  *   pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only]
- *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync] [convex]
+ *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-working] [convex]
  *   pnpm run env:sync:push -- --all [--yes] [--from-working] [convex]
  *   pnpm run env:sync:push -- … [--convex-only]   (same as trailing `convex`)
  *   pnpm run env:sync:push:cli
  *   pnpm run env:sync:clear [-- --dry-run]
  *   pnpm run deploy -- <staging|production> [--git-push] [--yes]
  */
+import { checkTarget } from "./lib/check.mjs";
 import { interactivePull } from "./lib/interactive-pull.mjs";
 import { pullAllVercelDeployments } from "./lib/pull-all.mjs";
 import { pullTarget } from "./lib/pull.mjs";
@@ -42,14 +43,21 @@ Usage:
   pnpm run env:sync:push -- <dev|preview|prod> convex
   pnpm run env:sync:push -- --all
   pnpm run env:sync:push -- --all convex
-                        Push dev, then preview, then prod. Default: each reads its .env.sync.* snapshot
-                        (same files as env:sync:pull -- --all). Each snapshot needs Convex routing
-                        (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL).
+                        Default: each target reads its .env.sync.* snapshot (same files as
+                        env:sync:pull -- --all). Each snapshot needs Convex routing
+                        (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL). Pass --from-working
+                        to read working files (.env.local / .env.preview / .env.production.local) instead.
 
   Trailing \`convex\` or flag \`--convex-only\`: run \`convex env set\` only — no Vercel CLI (faster).
 
   pnpm run env:sync:push:cli
                         Interactive push: choose targets, from-sync vs working, Vercel sensitive, --yes.
+
+  pnpm run env:sync:check -- <dev|preview|prod> [--from-working] [--convex-only|--vercel-only] [-q]
+                        Read-only diff: compare local file vs hosted Convex + Vercel for the target.
+                        Exits 0 if in sync, 1 otherwise. Default source is .env.sync.<env>; pass
+                        --from-working for working .env files. Use -q / --quiet to print only
+                        \`true\` / \`false\`.
 
   pnpm run env:sync:clear [-- --dry-run]
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
@@ -64,9 +72,10 @@ Usage:
                         Run the same gates/env/Convex deploy, then push the mapped branch instead
                         of calling Vercel CLI directly.
 
-  --from-sync       (push only, single target) Read the matching .env.sync.* instead of working files.
+  --from-sync       (push only) No-op alias kept for backwards compatibility — push always reads
+                        .env.sync.* by default now.
 
-  --from-working    (push only, with --all) Read per-target working files (.env.local / .env.preview /
+  --from-working    (push only) Read per-target working files (.env.local / .env.preview /
                         .env.production.local) instead of .env.sync.* — legacy behavior.
 
   --interactive     (push only) Same as env:sync:push:cli — guided push.
@@ -127,6 +136,12 @@ if (cmd === "pull" && target && !VALID.has(target)) {
   process.exit();
 }
 
+if (cmd === "check" && (!target || !VALID.has(target))) {
+  usage();
+  process.exitCode = 1;
+  process.exit();
+}
+
 try {
   if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
@@ -149,11 +164,11 @@ try {
     if (pushInteractive) {
       await interactivePushCli();
     } else {
-      /** `push --all` defaults to snapshot files so preview/prod are not overwritten from `.env.local`. */
-      const fromSyncForPush = pushAll ? !pushFromWorking : pushFromSync;
-      if (pushFromWorking && !pushAll) {
+      /** Push always reads `.env.sync.*` by default — pass `--from-working` to read working files. */
+      const fromSyncForPush = !pushFromWorking;
+      if (pushFromSync && pushFromWorking) {
         syncWarn(
-          "Ignoring --from-working without --all (single-target push already uses working files unless you pass --from-sync)."
+          "Both --from-sync and --from-working passed; --from-working wins."
         );
       }
       const pushOpts = {
@@ -176,6 +191,13 @@ try {
         );
       }
     }
+  } else if (cmd === "check") {
+    await checkTarget(/** @type {"dev" | "preview" | "prod"} */ (target), {
+      fromSync: !flags.has("--from-working"),
+      quiet: flags.has("--quiet") || flags.has("-q"),
+      convexOnly: flags.has("--convex-only") || positional.includes("convex"),
+      vercelOnly: flags.has("--vercel-only"),
+    });
   } else if (cmd === "deploy") {
     await deployTarget(parseDeployArgs(raw.slice(1)));
   } else {

@@ -27,11 +27,11 @@ Your **`.env.local`** should still point **`NEXT_PUBLIC_CONVEX_URL`** (and optio
 
 ## What gets synced
 
-| Target | Vercel environment | Convex deployment (`convex env …`) | Typical local file used on **push** |
-|--------|----------------------|-------------------------------------|-------------------------------------|
-| `dev` | `development` | Dev (default) | `.env.local`, then `.env.development.local` |
-| `preview` | `preview` | Dev CLI deployment* | `.env.preview`, then `.env.local` |
-| `prod` | `production` | `--prod` | `.env.production.local`, then `.env.local` |
+| Target | Vercel environment | Convex deployment (`convex env …`) | Default push source (snapshot) | Working file fallback (`--from-working`) |
+|--------|----------------------|-------------------------------------|-------------------------------|------------------------------------------|
+| `dev` | `development` | Dev (default) | `.env.sync.development` | `.env.local`, then `.env.development.local` |
+| `preview` | `preview` | Dev CLI deployment* | `.env.sync.preview` | `.env.preview`, then `.env.local` |
+| `prod` | `production` | `--prod` | `.env.sync.production` | `.env.production.local`, then `.env.local` |
 
 \*The Convex CLI only targets **dev** or **prod** deployments. The `preview` target still updates the **dev** deployment’s env via the CLI; [preview deployments](https://docs.convex.dev/production/hosting/preview-deployments) may also use [project env defaults](https://docs.convex.dev/production/environment-variables#project-environment-variable-defaults) in the Convex dashboard.
 
@@ -100,6 +100,7 @@ In the **root** `package.json` of your app:
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
+    "env:sync:check": "node scripts/vercel-convex-env-sync/run.mjs check",
     "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear",
     "deploy": "node scripts/vercel-convex-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
@@ -139,8 +140,16 @@ Preview **defaults to git branch `staging`** (`lib/env-sync-defaults.mjs`: **`VE
 # Push all three Vercel scopes + Convex using the merged snapshot files (recommended after pull --all):
 pnpm run env:sync:push -- --all --yes
 
-# Same as older behavior: push --all from working .env*.local / .env.preview files instead of .env.sync.*:
+# Read working .env*.local / .env.preview files instead of .env.sync.* (legacy behavior):
+pnpm run env:sync:push -- preview --from-working
 pnpm run env:sync:push -- --all --from-working --yes
+
+# Read-only diff: compare local file vs hosted Convex + Vercel for one target.
+# Exits 0 when both platforms match, 1 otherwise.
+pnpm run env:sync:check -- preview
+pnpm run env:sync:check -- prod --convex-only
+pnpm run env:sync:check -- preview --vercel-only
+pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
 
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear

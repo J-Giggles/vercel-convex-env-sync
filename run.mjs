@@ -27,6 +27,7 @@ import { pushTarget } from "./lib/push.mjs";
 import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
+import { syncMergeTarget } from "./lib/sync-merge.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -66,6 +67,16 @@ Usage:
                         Exits 0 if in sync, 1 otherwise. Default source is .env.sync.<env>; pass
                         --from-working for working .env files. Use -q / --quiet to print only
                         \`true\` / \`false\`. With ENV_SYNC_DISABLE_CONVEX=1 this is Vercel-only.
+                        Also flags keys present locally/remotely but not validated by env.ts
+                        (deprecated / unmanaged) when an env.ts file is found at repo root.
+
+  pnpm run env:sync -- <dev|preview|prod> [--yes] [--skip-push]
+                        Three-way merge .env.sync.<env> ↔ Convex ↔ Vercel: any key that's empty
+                        or missing on one side and filled on another is propagated everywhere.
+                        Distinct non-empty values are flagged as conflicts and skipped.
+                        Writes the merged map back to .env.sync.<env>, then pushes to both
+                        remotes (skip with --skip-push). With ENV_SYNC_DISABLE_CONVEX=1 the
+                        merge is Vercel-only.
 
   pnpm run env:sync:clear [-- --dry-run]
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
@@ -225,6 +236,12 @@ if (cmd === "check" && (!target || !VALID.has(target))) {
   process.exit();
 }
 
+if (cmd === "sync" && (!target || !VALID.has(target))) {
+  usage();
+  process.exitCode = 1;
+  process.exit();
+}
+
 /**
  * `--project` overrides everything else: pin to that one project for this invocation.
  * Otherwise: loop when ENV_SYNC_VERCEL_PROJECTS has ≥ 2 entries, or when --all-projects
@@ -325,6 +342,17 @@ try {
       await forEachProject(monorepoProjects, () => checkTarget(t, checkOpts));
     } else {
       await checkTarget(t, checkOpts);
+    }
+  } else if (cmd === "sync") {
+    const t = /** @type {"dev" | "preview" | "prod"} */ (target);
+    const syncOpts = {
+      yes: flags.has("--yes") || flags.has("-y"),
+      skipPush: flags.has("--skip-push"),
+    };
+    if (shouldLoopProjects) {
+      await forEachProject(monorepoProjects, () => syncMergeTarget(t, syncOpts));
+    } else {
+      await syncMergeTarget(t, syncOpts);
     }
   } else if (cmd === "deploy") {
     const deployArgs = parseDeployArgs(rawWithoutProject.slice(1));

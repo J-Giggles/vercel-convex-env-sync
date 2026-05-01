@@ -161,6 +161,7 @@ In the **root** `package.json` of your app:
 ```json
 {
   "scripts": {
+    "env:sync": "node scripts/vercel-convex-env-sync/run.mjs sync",
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
@@ -209,11 +210,19 @@ pnpm run env:sync:push -- preview --from-working
 pnpm run env:sync:push -- --all --from-working --yes
 
 # Read-only diff: compare local file vs hosted Convex + Vercel for one target.
-# Exits 0 when both platforms match, 1 otherwise.
+# Exits 0 when both platforms match, 1 otherwise. Also flags keys observed
+# anywhere (local / Convex / Vercel) that are not validated by env.ts.
 pnpm run env:sync:check -- preview
 pnpm run env:sync:check -- prod --convex-only
 pnpm run env:sync:check -- preview --vercel-only
 pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
+
+# Three-way merge: fill empty/missing values from whichever side has a value,
+# write the merged map back to .env.sync.<env>, then push to both remotes.
+# Distinct non-empty values are flagged as conflicts (skipped, not auto-resolved).
+pnpm run env:sync -- preview
+pnpm run env:sync -- preview --yes        # skip confirmation
+pnpm run env:sync -- preview --skip-push  # write local only; do not push
 
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear

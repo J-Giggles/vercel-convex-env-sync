@@ -278,30 +278,37 @@ try {
           "Both --from-sync and --from-working passed; --from-working wins."
         );
       }
-      const pushOpts = {
+      /**
+       * @param {string} [metadataNamespace] — per-project suffix for metadata storage so
+       *   monorepo pushes (same target across multiple projects) don't conflate drift state.
+       */
+      const buildPushOpts = (metadataNamespace) => ({
         yes: pushYes,
         fromSync: fromSyncForPush,
         convexOnly,
         force: pushForce,
-      };
+        ...(metadataNamespace ? { metadataNamespace } : {}),
+      });
       /**
        * @param {"dev" | "preview" | "prod"} t
+       * @param {string} [metadataNamespace]
        */
-      const runOne = async (t) => {
+      const runOne = async (t, metadataNamespace) => {
+        const opts = buildPushOpts(metadataNamespace);
         if (pushAll) {
           for (const eachT of /** @type {const} */ (["dev", "preview", "prod"])) {
             console.log("");
             syncInfo(`========== push ${eachT} ==========`);
             console.log("");
-            await pushTarget(eachT, pushOpts);
+            await pushTarget(eachT, opts);
           }
         } else {
-          await pushTarget(t, pushOpts);
+          await pushTarget(t, opts);
         }
       };
       const t = /** @type {"dev" | "preview" | "prod"} */ (target ?? "dev");
       if (shouldLoopProjects) {
-        await forEachProject(monorepoProjects, () => runOne(t));
+        await forEachProject(monorepoProjects, (entry) => runOne(t, entry.relPath));
       } else {
         await runOne(t);
       }

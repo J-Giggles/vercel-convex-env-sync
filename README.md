@@ -27,11 +27,11 @@ Your **`.env.local`** should still point **`NEXT_PUBLIC_CONVEX_URL`** (and optio
 
 ## What gets synced
 
-| Target | Vercel environment | Convex deployment (`convex env …`) | Typical local file used on **push** |
-|--------|----------------------|-------------------------------------|-------------------------------------|
-| `dev` | `development` | Dev (default) | `.env.local`, then `.env.development.local` |
-| `preview` | `preview` | Dev CLI deployment* | `.env.preview`, then `.env.local` |
-| `prod` | `production` | `--prod` | `.env.production.local`, then `.env.local` |
+| Target | Vercel environment | Convex deployment (`convex env …`) | Default push source (snapshot) | Working file fallback (`--from-working`) |
+|--------|----------------------|-------------------------------------|-------------------------------|------------------------------------------|
+| `dev` | `development` | Dev (default) | `.env.sync.development` | `.env.local`, then `.env.development.local` |
+| `preview` | `preview` | Dev CLI deployment* | `.env.sync.preview` | `.env.preview`, then `.env.local` |
+| `prod` | `production` | `--prod` | `.env.sync.production` | `.env.production.local`, then `.env.local` |
 
 \*The Convex CLI only targets **dev** or **prod** deployments. The `preview` target still updates the **dev** deployment’s env via the CLI; [preview deployments](https://docs.convex.dev/production/hosting/preview-deployments) may also use [project env defaults](https://docs.convex.dev/production/environment-variables#project-environment-variable-defaults) in the Convex dashboard.
 
@@ -139,7 +139,8 @@ Preview **defaults to git branch `staging`** (`lib/env-sync-defaults.mjs`: **`VE
 # Push all three Vercel scopes + Convex using the merged snapshot files (recommended after pull --all):
 pnpm run env:sync:push -- --all --yes
 
-# Same as older behavior: push --all from working .env*.local / .env.preview files instead of .env.sync.*:
+# Read working .env*.local / .env.preview files instead of .env.sync.* (legacy behavior):
+pnpm run env:sync:push -- preview --from-working
 pnpm run env:sync:push -- --all --from-working --yes
 
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):

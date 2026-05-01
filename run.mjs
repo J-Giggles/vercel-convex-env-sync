@@ -6,7 +6,7 @@
  *   pnpm run env:sync:pull
  *   pnpm run env:sync:pull -- --all
  *   pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only]
- *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync] [convex]
+ *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-working] [convex]
  *   pnpm run env:sync:push -- --all [--yes] [--from-working] [convex]
  *   pnpm run env:sync:push -- … [--convex-only]   (same as trailing `convex`)
  *   pnpm run env:sync:push:cli
@@ -42,9 +42,10 @@ Usage:
   pnpm run env:sync:push -- <dev|preview|prod> convex
   pnpm run env:sync:push -- --all
   pnpm run env:sync:push -- --all convex
-                        Push dev, then preview, then prod. Default: each reads its .env.sync.* snapshot
-                        (same files as env:sync:pull -- --all). Each snapshot needs Convex routing
-                        (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL).
+                        Default: each target reads its .env.sync.* snapshot (same files as
+                        env:sync:pull -- --all). Each snapshot needs Convex routing
+                        (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL). Pass --from-working
+                        to read working files (.env.local / .env.preview / .env.production.local) instead.
 
   Trailing \`convex\` or flag \`--convex-only\`: run \`convex env set\` only — no Vercel CLI (faster).
 
@@ -64,9 +65,10 @@ Usage:
                         Run the same gates/env/Convex deploy, then push the mapped branch instead
                         of calling Vercel CLI directly.
 
-  --from-sync       (push only, single target) Read the matching .env.sync.* instead of working files.
+  --from-sync       (push only) No-op alias kept for backwards compatibility — push always reads
+                        .env.sync.* by default now.
 
-  --from-working    (push only, with --all) Read per-target working files (.env.local / .env.preview /
+  --from-working    (push only) Read per-target working files (.env.local / .env.preview /
                         .env.production.local) instead of .env.sync.* — legacy behavior.
 
   --interactive     (push only) Same as env:sync:push:cli — guided push.
@@ -149,11 +151,11 @@ try {
     if (pushInteractive) {
       await interactivePushCli();
     } else {
-      /** `push --all` defaults to snapshot files so preview/prod are not overwritten from `.env.local`. */
-      const fromSyncForPush = pushAll ? !pushFromWorking : pushFromSync;
-      if (pushFromWorking && !pushAll) {
+      /** Push always reads `.env.sync.*` by default — pass `--from-working` to read working files. */
+      const fromSyncForPush = !pushFromWorking;
+      if (pushFromSync && pushFromWorking) {
         syncWarn(
-          "Ignoring --from-working without --all (single-target push already uses working files unless you pass --from-sync)."
+          "Both --from-sync and --from-working passed; --from-working wins."
         );
       }
       const pushOpts = {
